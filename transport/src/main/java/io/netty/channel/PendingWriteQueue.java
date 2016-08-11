@@ -111,13 +111,14 @@ public final class PendingWriteQueue {
 
     /**
      * Remove all pending write operation and fail them with the given {@link Throwable}. The message will be released
-     * via {@link ReferenceCountUtil#safeRelease(Object)}.
+     * via {@link ReferenceCountUtil#safeRelease(Object)}. Returns {@code true} if it was not empty.
      */
-    public void removeAndFailAll(Throwable cause) {
+    public boolean removeAndFailAll(Throwable cause) {
         assert ctx.executor().inEventLoop();
         if (cause == null) {
             throw new NullPointerException("cause");
         }
+        boolean wasEmpty = isEmpty();
         // It is possible for some of the failed promises to trigger more writes. The new writes
         // will "revive" the queue, so we need to clean them up until the queue is empty.
         for (PendingWrite write = head; write != null; write = head) {
@@ -134,13 +135,14 @@ public final class PendingWriteQueue {
             }
         }
         assertEmpty();
+        return wasEmpty;
     }
 
     /**
      * Remove a pending write operation and fail it with the given {@link Throwable}. The message will be released via
-     * {@link ReferenceCountUtil#safeRelease(Object)}.
+     * {@link ReferenceCountUtil#safeRelease(Object)}. Returns {@code true} if it was not empty.
      */
-    public void removeAndFail(Throwable cause) {
+    public boolean removeAndFail(Throwable cause) {
         assert ctx.executor().inEventLoop();
         if (cause == null) {
             throw new NullPointerException("cause");
@@ -148,12 +150,13 @@ public final class PendingWriteQueue {
         PendingWrite write = head;
 
         if (write == null) {
-            return;
+            return false;
         }
         ReferenceCountUtil.safeRelease(write.msg);
         ChannelPromise promise = write.promise;
         safeFail(promise, cause);
         recycle(write, true);
+        return true;
     }
 
     /**
