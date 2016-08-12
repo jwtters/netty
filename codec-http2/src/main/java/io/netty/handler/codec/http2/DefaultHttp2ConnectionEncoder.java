@@ -19,6 +19,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.ChannelPromiseNotifier;
 import io.netty.channel.CoalescingBufferQueue;
 import io.netty.handler.codec.http2.Http2Exception.ClosedStreamCreationException;
 import io.netty.util.internal.UnstableApi;
@@ -341,7 +342,8 @@ public class DefaultHttp2ConnectionEncoder implements Http2ConnectionEncoder {
                                    ChannelPromise promise) {
             super(stream, padding, endOfStream, promise);
             queue = new CoalescingBufferQueue(promise.channel());
-            queue.add(buf, promise);
+            // Using false for the notifier as the may already fail the promise in error(...)
+            queue.add(buf, promise.isVoid() ? null : new ChannelPromiseNotifier(false, promise));
             dataSize = queue.readableBytes();
         }
 
