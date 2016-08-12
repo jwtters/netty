@@ -166,38 +166,35 @@ public final class PendingWriteQueue {
     public ChannelFuture removeAndWriteAll() {
         assert ctx.executor().inEventLoop();
 
-        if (size == 1) {
-            // No need to use ChannelPromiseAggregator for this case.
-            return removeAndWrite();
-        }
-        PendingWrite write = head;
-        if (write == null) {
-            // empty so just return null
+        if (isEmpty()) {
             return null;
         }
-
-        // Guard against re-entrance by directly reset
-        head = tail = null;
-        size = 0;
-        bytes = 0;
 
         ChannelPromise p = ctx.newPromise();
         PromiseCombiner combiner = new PromiseCombiner();
         try {
-            while (write != null) {
-                PendingWrite next = write.next;
-                Object msg = write.msg;
-                ChannelPromise promise = write.promise;
-                recycle(write, false);
-                combiner.add(promise);
-                ctx.write(msg, promise);
-                write = next;
+            // It is possible for some of the written promises to trigger more writes. The new writes
+            // will "revive" the queue, so we need to write them up until the queue is empty.
+            for (PendingWrite write = head; write != null; write = head) {
+                head = tail = null;
+                size = 0;
+                bytes = 0;
+
+                while (write != null) {
+                    PendingWrite next = write.next;
+                    Object msg = write.msg;
+                    ChannelPromise promise = write.promise;
+                    recycle(write, false);
+                    combiner.add(promise);
+                    ctx.write(msg, promise);
+                    write = next;
+                }
             }
-            assertEmpty();
             combiner.finish(p);
         } catch (Throwable cause) {
             p.setFailure(cause);
         }
+        assertEmpty();
         return p;
     }
 
